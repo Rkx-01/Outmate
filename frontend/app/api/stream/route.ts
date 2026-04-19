@@ -29,10 +29,14 @@ export async function GET(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[STREAM] Backend error:', response.status, errorText);
-      const errorMessage = response.headers.get('content-type')?.includes('application/json')
-        ? (JSON.parse(errorText).detail || errorText)
-        : errorText;
+      console.error(`[STREAM] Backend error from ${backendUrl}:`, response.status, errorText);
+      let parsedError = errorText;
+      try {
+        const jsonError = JSON.parse(errorText);
+        parsedError = jsonError.detail || jsonError.message || errorText;
+      } catch (e) {}
+      
+      const errorMessage = `Backend Error (${response.status}) at ${backendUrl}: ${parsedError}`;
       
       const sseError = `event: error\ndata: ${JSON.stringify({ message: errorMessage })}\n\n`;
       return new NextResponse(sseError, {
