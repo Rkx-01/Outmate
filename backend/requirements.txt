@@ -1,7 +1,8 @@
 fastapi
 uvicorn
-agno==2.5.15
-google-genai==1.2.0
+agno>=2.5.15
+google-genai>=1.0.0
+mempalace
 pydantic
 pydantic-settings
 google-generativeai
