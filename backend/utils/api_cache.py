@@ -4,6 +4,7 @@ import hashlib
 import functools
 import logging
 from datetime import datetime, timedelta
+from typing import Union, Optional, List, Dict, Any
 import os
 
 log = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ def _get_hash(*args, **kwargs):
     # Convert args and kwargs to a canonical JSON string
     return hashlib.sha256(json.dumps({"args": args, "kwargs": kwargs}, sort_keys=True).encode()).hexdigest()
 
-def get_cached_response(endpoint: str, payload_hash: str, ttl_days: int) -> dict | list | None:
+def get_cached_response(endpoint: str, payload_hash: str, ttl_days: int) -> Optional[Union[dict, list]]:
     try:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
@@ -53,7 +54,7 @@ def get_cached_response(endpoint: str, payload_hash: str, ttl_days: int) -> dict
         log.error(f"Cache read error: {e}")
     return None
 
-def set_cached_response(endpoint: str, payload_hash: str, data: dict | list):
+def set_cached_response(endpoint: str, payload_hash: str, data: Union[dict, list]):
     try:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()

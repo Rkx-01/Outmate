@@ -2,7 +2,15 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 import json, re, os, asyncio, logging
 from agno.agent import Agent
-from agno.models.google import Gemini
+try:
+    from agno.models.google import Gemini
+    from agno.models.base import Model
+    MOCK_MODE = False
+except ImportError:
+    print("WARNING: Gemini model failed to load (Python 3.9 issue). Running in MOCK MODE.")
+    MOCK_MODE = True
+    Gemini = lambda **kwargs: None
+    Model = object
 from agno.db.sqlite.sqlite import SqliteDb
 from models.agents import AgentInput, AgentOutput
 from memory.mempalace import mempalace_diary_write, mempalace_search
@@ -14,6 +22,21 @@ _DB_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "gtm_agent_sess
 
 async def arun_with_backoff(agent, prompt: str, max_retries: int = 4):
     """Call agent.arun with exponential backoff on 429 rate limit errors."""
+    if MOCK_MODE:
+        return type('obj', (object,), {
+            'content': json.dumps({
+                "plan": ["Mock Discovery", "Mock Enrichment", "Mock Strategy"],
+                "target_signals": ["Mock Hiring Signal"],
+                "company_filters": {"has_website": {"value": True}},
+                "prospect_filters": {},
+                "reasoning": "Mock reasoning for local testing.",
+                "confidence": 1.0,
+                "status": "success",
+                "buying_signals": ["Recently hired 5 SDRs"],
+                "tech_stack": ["React", "Python"],
+                "personas": [{"hook": "Saw you are hiring!", "message_angle": "Sales Optimization"}]
+            })
+        })()
     log.info(
         f"[gemini] [{agent.name}] prompt ({len(prompt)} chars):\n"
         f"{'─' * 60}\n{prompt.strip()}\n{'─' * 60}"
@@ -88,6 +111,10 @@ class BaseGTMAgent(ABC):
         self.default_tools = [mempalace_diary_write, mempalace_search] if use_tools else []
         self.tools = self.default_tools + (tools or [])
         self.instructions = instructions or []
+
+        if MOCK_MODE:
+            self.agent = type('obj', (object,), {'name': self.name})()
+            return
 
         self.agent = Agent(
             name=self.name,

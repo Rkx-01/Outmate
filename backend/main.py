@@ -8,8 +8,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
-from api.routes import router, limiter
-from agents import * # Initialize all agents
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -30,6 +28,12 @@ def setup_logging():
     logging.basicConfig(level=logging.INFO, handlers=[handler, file_handler])
 
 setup_logging()
+
+logging.basicConfig(level=logging.INFO)
+logging.info(f"CWD: {os.getcwd()}")
+logging.info(f"Files: {os.listdir('.')}")
+
+from api.routes import router, limiter
 
 app = FastAPI(title="GTM Intelligence API")
 

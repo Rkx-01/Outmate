@@ -1,4 +1,5 @@
 import os, logging
+from typing import Optional, Dict, List, Union
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ log = logging.getLogger(__name__)
 #     return [job.get("job_title") for job in response.json().get("data", []) if job.get("job_title")]
 #
 # @with_retry()
-# def get_funding_info(company_name: str) -> dict | None:
+# def get_funding_info(company_name: str) -> Optional[dict]:
 #     response = httpx.get(
 #         f"{THEIRSTACK_BASE}/companies/search",
 #         params={"name": company_name, "include_funding": True},
@@ -119,7 +120,7 @@ def get_hiring_signals(company_name: str) -> list[str]:
     return signals
 
 
-def get_funding_info(company_name: str) -> dict | None:
+def get_funding_info(company_name: str) -> Optional[dict]:
     """Mock: Return latest funding data for a company."""
     # TheirStack funding is redundant with Explorium in this mock; return None to avoid duplication
     log.info(f"[mock] get_funding_info (theirstack): company='{company_name}' -> None (deferred to Explorium)")
