@@ -1,11 +1,10 @@
 fastapi
 uvicorn
 agno>=2.5.15
-google-genai>=1.0.0
+groq
 mempalace
 pydantic
 pydantic-settings
-google-generativeai
 python-dotenv
 sqlmodel
 httpx
@@ -13,4 +12,3 @@ sse-starlette
 pytest
 pytest-asyncio
 slowapi
-

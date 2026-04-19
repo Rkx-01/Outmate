@@ -3,13 +3,13 @@ from typing import Any, Dict, List, Optional
 import json, re, os, asyncio, logging
 from agno.agent import Agent
 try:
-    from agno.models.google import Gemini
+    from agno.models.groq import Groq
     from agno.models.base import Model
     MOCK_MODE = False
 except ImportError:
-    print("WARNING: Gemini model failed to load (Python 3.9 issue). Running in MOCK MODE.")
+    print("WARNING: Groq model failed to load. Running in MOCK MODE.")
     MOCK_MODE = True
-    Gemini = lambda **kwargs: None
+    Groq = lambda **kwargs: None
     Model = object
 from agno.db.sqlite.sqlite import SqliteDb
 from models.agents import AgentInput, AgentOutput
@@ -116,18 +116,24 @@ class BaseGTMAgent(ABC):
             self.agent = type('obj', (object,), {'name': self.name})()
             return
 
-        self.agent = Agent(
-            name=self.name,
-            description=self.description,
-            model=Gemini(id="gemini-3.1-flash-lite-preview", api_key=key_manager.get_key()),
-            tools=self.tools,
-            instructions=self.instructions + [
-                "Always return your final answer in the requested JSON format."
-            ],
-            markdown=True,
-            add_history_to_context=True,
-            db=SqliteDb(db_file=_DB_FILE),
-        )
+        try:
+            self.agent = Agent(
+                name=self.name,
+                description=self.description,
+                model=Groq(id="llama-3.3-70b-versatile", api_key=os.getenv("GROQ_API_KEY")),
+                tools=self.tools,
+                instructions=self.instructions + [
+                    "Always return your final answer in the requested JSON format."
+                ],
+                markdown=True,
+                add_history_to_context=True,
+                db=SqliteDb(db_file=_DB_FILE),
+            )
+        except Exception as e:
+            log.error(f"Failed to instantiate Agent {self.name} with Groq model: {e}")
+            global MOCK_MODE
+            MOCK_MODE = True
+            self.agent = type('obj', (object,), {'name': self.name})()
 
     @abstractmethod
     async def run(self, input_data: AgentInput) -> AgentOutput:
