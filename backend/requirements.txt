@@ -1,11 +1,10 @@
 fastapi
 uvicorn
-agno
-mempalace
+agno==2.5.15
+google-genai==1.2.0
 pydantic
 pydantic-settings
 google-generativeai
-google-genai
 python-dotenv
 sqlmodel
 httpx
