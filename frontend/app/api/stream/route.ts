@@ -19,16 +19,12 @@ export async function GET(req: NextRequest) {
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000';
 
   try {
-    const response = await fetch(`${backendUrl}/api/run`, {
-      method: 'POST',
+    const response = await fetch(`${backendUrl}/api/stream?query=${encodeURIComponent(query)}`, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'X-API-KEY': process.env.GTM_API_KEY || 'dev-key',
+        'Accept': 'text/event-stream',
       },
-      body: JSON.stringify({ query }),
       cache: 'no-store',
-      // @ts-ignore - duplex is valid but not yet in all TS fetch typedefs
-      duplex: 'half',
     });
 
     if (!response.ok) {

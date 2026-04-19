@@ -32,6 +32,13 @@ async def run_gtm(request: Request, run_req: RunRequest, _ = Depends(verify_api_
         sse_generator(orchestrator.run_pipeline(run_req.query, run_req.session_id))
     )
 
+@router.get("/stream")
+async def stream_gtm(request: Request, query: str, session_id: Optional[str] = None):
+    # This matches the GET request the frontend is actually sending
+    return EventSourceResponse(
+        sse_generator(orchestrator.run_pipeline(query, session_id))
+    )
+
 @router.get("/history", dependencies=[Depends(verify_api_key)])
 async def get_history():
     return {"runs": cache.get_history()}
