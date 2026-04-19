@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('[STREAM] Backend error:', response.status, errorText);
       const errorMessage = response.headers.get('content-type')?.includes('application/json')
         ? (JSON.parse(errorText).detail || errorText)
         : errorText;

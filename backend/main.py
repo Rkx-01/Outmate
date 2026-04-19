@@ -33,6 +33,10 @@ setup_logging()
 
 app = FastAPI(title="GTM Intelligence API")
 
+@app.get("/direct-test")
+async def direct_test():
+    return {"message": "Direct route is working!"}
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
