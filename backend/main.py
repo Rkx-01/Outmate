@@ -33,9 +33,13 @@ setup_logging()
 
 app = FastAPI(title="GTM Intelligence API")
 
-@app.get("/direct-test")
-async def direct_test():
-    return {"message": "Direct route is working!"}
+@app.get("/")
+async def root():
+    return {"status": "online", "message": "GTM API is running"}
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -53,13 +57,7 @@ async def log_requests(request: Request, call_next):
     start = time.time()
     request_id = str(uuid4())[:8]
     response = await call_next(request)
-    logging.info("request", extra={"extra": {
-        "request_id": request_id,
-        "method": request.method,
-        "path": request.url.path,
-        "status_code": response.status_code,
-        "duration_ms": round((time.time() - start) * 1000, 2)
-    }})
+    logging.info(f"Request: {request.method} {request.url.path} - Status: {response.status_code}")
     return response
 
 app.include_router(router, prefix="/api")
