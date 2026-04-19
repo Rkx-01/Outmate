@@ -14,7 +14,6 @@ except ImportError:
 from agno.db.sqlite.sqlite import SqliteDb
 from models.agents import AgentInput, AgentOutput
 from memory.mempalace import mempalace_diary_write, mempalace_search
-from utils.api_keys import key_manager
 
 log = logging.getLogger(__name__)
 _DB_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "gtm_agent_sessions.db")
@@ -38,7 +37,7 @@ async def arun_with_backoff(agent, prompt: str, max_retries: int = 4):
             })
         })()
     log.info(
-        f"[gemini] [{agent.name}] prompt ({len(prompt)} chars):\n"
+        f"[groq] [{agent.name}] prompt ({len(prompt)} chars):\n"
         f"{'─' * 60}\n{prompt.strip()}\n{'─' * 60}"
     )
     for attempt in range(max_retries):
@@ -46,13 +45,13 @@ async def arun_with_backoff(agent, prompt: str, max_retries: int = 4):
             response = await agent.arun(prompt)
             content_str = getattr(response, 'content', str(response))
             
-            # Agno silently swallows HTTP 503/429 errors from Gemini and prints them as valid string outputs. 
+            # Agno silently swallows HTTP 503/429 errors from Groq and prints them as valid string outputs. 
             # We must detect these swallowed API errors natively and force the retry backoff.
             if '"error"' in content_str and ('"code": 503' in content_str or '"code": 429' in content_str):
                 raise ValueError(f"Agno API Swallowed Error: {content_str[:150]}")
                 
             log.info(
-                f"[gemini] [{agent.name}] response (attempt {attempt + 1}):\n"
+                f"[groq] [{agent.name}] response (attempt {attempt + 1}):\n"
                 f"{'─' * 60}\n{content_str}\n{'─' * 60}"
             )
             return response
@@ -68,21 +67,17 @@ async def arun_with_backoff(agent, prompt: str, max_retries: int = 4):
             if is_retryable:
                 wait = 2 ** attempt  # 1s, 2s, 4s, 8s
                 if any(x in error_str for x in ["429", "quota", "rate", "503"]):
-                    log.warning(f"API rejection hit, triggering key rotation")
-                    new_key = key_manager.get_next_key()
-                    if new_key:
-                        log.warning(f"Rotating Gemini key...")
-                        agent.model.api_key = new_key
+                    log.warning(f"Groq API rejection hit, backoff initiated.")
                 
                 log.warning(f"Retrying in {wait}s (attempt {attempt+1}/{max_retries}) based on error: {error_str[:100]}")
                 await asyncio.sleep(wait)
             else:
-                log.error(f"[gemini] [{agent.name}] non-retryable error on attempt {attempt + 1}: {e}")
+                log.error(f"[groq] [{agent.name}] non-retryable error on attempt {attempt + 1}: {e}")
                 raise
     # Final attempt — let it raise, but still log the response if it succeeds
     response = await agent.arun(prompt)
     log.info(
-        f"[gemini] [{agent.name}] response (final attempt):\n"
+        f"[groq] [{agent.name}] response (final attempt):\n"
         f"{'─' * 60}\n{getattr(response, 'content', str(response))}\n{'─' * 60}"
     )
     return response
@@ -112,6 +107,7 @@ class BaseGTMAgent(ABC):
         self.tools = self.default_tools + (tools or [])
         self.instructions = instructions or []
 
+        global MOCK_MODE
         if MOCK_MODE:
             self.agent = type('obj', (object,), {'name': self.name})()
             return
@@ -131,7 +127,6 @@ class BaseGTMAgent(ABC):
             )
         except Exception as e:
             log.error(f"Failed to instantiate Agent {self.name} with Groq model: {e}")
-            global MOCK_MODE
             MOCK_MODE = True
             self.agent = type('obj', (object,), {'name': self.name})()
 
