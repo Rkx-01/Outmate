@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+gtm_intelligence.db
+mempalace_data/
+logs/

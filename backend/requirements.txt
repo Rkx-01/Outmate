@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+agno
+mempalace
+pydantic
+pydantic-settings
+google-generativeai
+google-genai
+python-dotenv
+sqlmodel
+httpx
+sse-starlette
+pytest
+pytest-asyncio
+slowapi
+

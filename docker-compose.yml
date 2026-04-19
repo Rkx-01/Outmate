@@ -1,0 +1,44 @@
+services:
+  backend:
+    build: ./backend
+    container_name: gtm-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend-mempalace:/app/mempalace_data
+      - backend-logs:/app/logs
+      - backend-db:/app/data
+    env_file:
+      - .env
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - DATABASE_URL=sqlite:///./data/gtm_intelligence.db
+    networks:
+      - gtm-network
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: gtm-frontend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - GTM_API_KEY=${GTM_API_KEY}
+      - PORT=3000
+    depends_on:
+      - backend
+    networks:
+      - gtm-network
+    restart: unless-stopped
+
+networks:
+  gtm-network:
+    driver: bridge
+
+volumes:
+  backend-mempalace:
+  backend-logs:
+  backend-db:
