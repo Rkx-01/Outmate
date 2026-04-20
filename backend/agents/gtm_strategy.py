@@ -1,12 +1,15 @@
 from .base import BaseGTMAgent, parse_llm_json, arun_with_backoff
 from models.agents import AgentInput, AgentOutput
 from .base import AgentRegistry
+from config import VALID_LINKEDIN_CATEGORIES
 import json, logging
 
 log = logging.getLogger(__name__)
 
 class GTMStrategyAgent(BaseGTMAgent):
     def __init__(self):
+        categories_list = ", ".join([f"'{cat}'" for cat in VALID_LINKEDIN_CATEGORIES])
+        
         super().__init__(
             name="gtm_strategy",
             description="Generates personalized GTM strategies and outreach content.",
@@ -15,6 +18,8 @@ class GTMStrategyAgent(BaseGTMAgent):
                 "Reference specific company signals like recent funding or tech stack in the hooks.",
                 "Generate full email snippets ready to be copied.",
                 "Generate competitive intelligence including displacement angles and landmine questions.",
+                f"Valid LinkedIn categories for industry context: {categories_list}",
+                "Use industry context from company.linkedin_category (if available) to tailor messaging.",
                 "You MUST return a strategy object for EVERY company provided — do not skip any.",
             ]
         )

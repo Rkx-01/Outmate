@@ -2,85 +2,117 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 import json, re, os, asyncio, logging
 from agno.agent import Agent
-try:
-    from agno.models.groq import Groq
-    from agno.models.base import Model
-    MOCK_MODE = False
-except ImportError:
-    print("WARNING: Groq model failed to load. Running in MOCK MODE.")
-    MOCK_MODE = True
-    Groq = lambda **kwargs: None
-    Model = object
+from agno.models.google import Gemini
 from agno.db.sqlite.sqlite import SqliteDb
 from models.agents import AgentInput, AgentOutput
 from memory.mempalace import mempalace_diary_write, mempalace_search
+from utils.api_keys import key_manager
+from config import VALID_LINKEDIN_CATEGORIES
 
 log = logging.getLogger(__name__)
 _DB_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "gtm_agent_sessions.db")
 
+# Model rotation order for error recovery
+MODEL_ROTATION = [
+    "gemini-3.1-flash-lite-preview",  # Primary (already tried 3x)
+    "gemini-3-flash-preview",          # Secondary  
+    "gemini-3.1-pro-preview",          # Tertiary
+]
 
-async def arun_with_backoff(agent, prompt: str, max_retries: int = 4):
-    """Call agent.arun with exponential backoff on 429 rate limit errors."""
-    if MOCK_MODE:
-        return type('obj', (object,), {
-            'content': json.dumps({
-                "plan": ["Mock Discovery", "Mock Enrichment", "Mock Strategy"],
-                "target_signals": ["Mock Hiring Signal"],
-                "company_filters": {"has_website": {"value": True}},
-                "prospect_filters": {},
-                "reasoning": "Mock reasoning for local testing.",
-                "confidence": 1.0,
-                "status": "success",
-                "buying_signals": ["Recently hired 5 SDRs"],
-                "tech_stack": ["React", "Python"],
-                "personas": [{"hook": "Saw you are hiring!", "message_angle": "Sales Optimization"}]
-            })
-        })()
+# Error message for exhausted attempts
+RATE_LIMIT_ERROR_MESSAGE = """Rate limit exceeded across all models and API keys. The task could not be completed. You can click Restart to try the entire job again or Resume to continue from where it left off."""
+
+
+async def arun_with_backoff(agent, prompt: str, max_retries_per_model: int = 3):
+    """
+    Call agent.arun with model rotation on rate limit errors.
+    
+    Strategy: Try each model up to 3 times with different API keys.
+    Total attempts: 3 models × 3 keys = 9 attempts maximum.
+    If all fail, return specific error message for frontend.
+    """
     log.info(
-        f"[groq] [{agent.name}] prompt ({len(prompt)} chars):\n"
+        f"[gemini] [{agent.name}] prompt ({len(prompt)} chars):\n"
         f"{'─' * 60}\n{prompt.strip()}\n{'─' * 60}"
     )
-    for attempt in range(max_retries):
+    
+    total_attempts = 0
+    max_total_attempts = len(MODEL_ROTATION) * max_retries_per_model  # 9 attempts
+    model_index = 0
+    
+    while total_attempts < max_total_attempts:
+        current_model = MODEL_ROTATION[model_index]
+        attempt_in_model = total_attempts % max_retries_per_model
+        
         try:
+            # Switch to new model if needed
+            if agent.model.id != current_model:
+                new_key = key_manager.get_next_key()
+                agent.model = Gemini(id=current_model, api_key=new_key)
+                log.warning(f"[{agent.name}] Switching to model: {current_model}")
+            
+            # Rotate API key for each retry
+            if attempt_in_model > 0:
+                new_key = key_manager.get_next_key()
+                agent.model.api_key = new_key
+                log.info(f"[{agent.name}] Rotating API key for {current_model} (attempt {attempt_in_model + 1})")
+            
             response = await agent.arun(prompt)
             content_str = getattr(response, 'content', str(response))
             
-            # Agno silently swallows HTTP 503/429 errors from Groq and prints them as valid string outputs. 
-            # We must detect these swallowed API errors natively and force the retry backoff.
-            if '"error"' in content_str and ('"code": 503' in content_str or '"code": 429' in content_str):
+            # Detect swallowed API errors by Agno
+            if '"error"' in content_str and any(x in content_str for x in ['"code": 503', '"code": 429', '"status": "UNAVAILABLE"']):
                 raise ValueError(f"Agno API Swallowed Error: {content_str[:150]}")
-                
+            
+            # Success - return response
             log.info(
-                f"[groq] [{agent.name}] response (attempt {attempt + 1}):\n"
+                f"[gemini] [{agent.name}] response (attempt {total_attempts + 1}):\n"
                 f"{'─' * 60}\n{content_str}\n{'─' * 60}"
             )
             return response
+            
         except Exception as e:
             error_str = str(e).lower()
-            # Check for rate limit, service unavailable, and networking errors
-            is_retryable = any(x in error_str for x in [
+            total_attempts += 1
+            
+            # Check if error is rate limit or service overload
+            is_rate_limit_error = any(x in error_str for x in [
                 "429", "503", "quota", "rate", "resource_exhausted", 
                 "unavailable", "service unavailable", "high demand",
-                "connection", "timeout", "read_error"
+                "overloaded"
             ])
             
-            if is_retryable:
-                wait = 2 ** attempt  # 1s, 2s, 4s, 8s
-                if any(x in error_str for x in ["429", "quota", "rate", "503"]):
-                    log.warning(f"Groq API rejection hit, backoff initiated.")
+            if is_rate_limit_error and total_attempts < max_total_attempts:
+                # Move to next model if exhausted retries for current model
+                if (attempt_in_model + 1) >= max_retries_per_model:
+                    model_index = (model_index + 1) % len(MODEL_ROTATION)
                 
-                log.warning(f"Retrying in {wait}s (attempt {attempt+1}/{max_retries}) based on error: {error_str[:100]}")
+                wait = 2 ** attempt_in_model  # 1s, 2s, 4s
+                log.warning(
+                    f"[{agent.name}] Rate limit error on {current_model} (attempt {total_attempts}/{max_total_attempts}): {error_str[:80]}. "
+                    f"Retrying in {wait}s..."
+                )
                 await asyncio.sleep(wait)
-            else:
-                log.error(f"[groq] [{agent.name}] non-retryable error on attempt {attempt + 1}: {e}")
+                continue
+            
+            elif not is_rate_limit_error:
+                # Non-retryable error - fail immediately
+                log.error(f"[{agent.name}] Non-retryable error on attempt {total_attempts}: {e}")
                 raise
-    # Final attempt — let it raise, but still log the response if it succeeds
-    response = await agent.arun(prompt)
-    log.info(
-        f"[groq] [{agent.name}] response (final attempt):\n"
-        f"{'─' * 60}\n{getattr(response, 'content', str(response))}\n{'─' * 60}"
-    )
-    return response
+            
+            else:
+                # All attempts exhausted
+                log.error(f"[{agent.name}] All {max_total_attempts} attempts exhausted across models. Final error: {e}")
+                break
+    
+    # All attempts failed - return rate limit error for frontend
+    error_output = {
+        "error": RATE_LIMIT_ERROR_MESSAGE,
+        "attempt_count": total_attempts,
+        "models_tried": MODEL_ROTATION,
+        "recommendation": "User can click Restart or Resume"
+    }
+    raise Exception(json.dumps(error_output))
 
 
 def parse_llm_json(content: str) -> dict:
@@ -99,6 +131,9 @@ def parse_llm_json(content: str) -> dict:
 
 
 class BaseGTMAgent(ABC):
+    # Valid LinkedIn industry categories for filtering and validation
+    VALID_LINKEDIN_CATEGORIES = VALID_LINKEDIN_CATEGORIES
+    
     def __init__(self, name: str, description: str, tools: List[Any] = None, instructions: List[str] = None, use_tools: bool = True):
         self.name = name
         self.description = description
@@ -107,28 +142,18 @@ class BaseGTMAgent(ABC):
         self.tools = self.default_tools + (tools or [])
         self.instructions = instructions or []
 
-        global MOCK_MODE
-        if MOCK_MODE:
-            self.agent = type('obj', (object,), {'name': self.name})()
-            return
-
-        try:
-            self.agent = Agent(
-                name=self.name,
-                description=self.description,
-                model=Groq(id="llama-3.3-70b-versatile", api_key=os.getenv("GROQ_API_KEY")),
-                tools=self.tools,
-                instructions=self.instructions + [
-                    "Always return your final answer in the requested JSON format."
-                ],
-                markdown=True,
-                add_history_to_context=True,
-                db=SqliteDb(db_file=_DB_FILE),
-            )
-        except Exception as e:
-            log.error(f"Failed to instantiate Agent {self.name} with Groq model: {e}")
-            MOCK_MODE = True
-            self.agent = type('obj', (object,), {'name': self.name})()
+        self.agent = Agent(
+            name=self.name,
+            description=self.description,
+            model=Gemini(id=MODEL_ROTATION[0], api_key=key_manager.get_key()),
+            tools=self.tools,
+            instructions=self.instructions + [
+                "Always return your final answer in the requested JSON format."
+            ],
+            markdown=True,
+            add_history_to_context=True,
+            db=SqliteDb(db_file=_DB_FILE),
+        )
 
     @abstractmethod
     async def run(self, input_data: AgentInput) -> AgentOutput:

@@ -1,5 +1,4 @@
 import os, functools, time, random, logging
-from typing import Optional, Dict, List, Union
 from datetime import datetime, timedelta
 import httpx
 from config import settings
@@ -45,7 +44,7 @@ def with_retry(max_retries=2, backoff=1.0):
 
 @with_persistent_cache(ttl_days=30)
 @with_retry()
-def _real_match_business(name: str, website: str = None) -> Optional[str]:
+def _real_match_business(name: str, website: str = None) -> str | None:
     """Step 1: Resolve a company name/website to an Explorium business_id."""
     payload: dict = {"name": name}
     if website:
@@ -99,7 +98,7 @@ def _real_search_companies(query_str: str = "", filters: dict = None) -> list[di
 
 @with_persistent_cache(ttl_days=30)
 @with_retry()
-def _real_enrich_company(business_id: str) -> Optional[dict]:
+def _real_enrich_company(business_id: str) -> dict | None:
     if not business_id:
         return None
     response = httpx.post(
@@ -162,7 +161,7 @@ def _real_fetch_prospects(business_id: str, job_levels: list = None, job_departm
 
 @with_persistent_cache(ttl_days=30)
 @with_retry()
-def _real_enrich_contact(prospect_id: str) -> Optional[dict]:
+def _real_enrich_contact(prospect_id: str) -> dict | None:
     response = httpx.post(
         f"{EXPLORIUM_BASE}/prospects/contacts_information/enrich",
         json={
@@ -228,7 +227,7 @@ def get_hiring_signals(events: list[dict]) -> list[str]:
     return signals
 
 
-def get_funding_info(events: list[dict]) -> Optional[dict]:
+def get_funding_info(events: list[dict]) -> dict | None:
     target_events = [e for e in (events or []) if e.get("event_name") in ["new_funding_round", "new_investment", "ipo_announcement"]]
     if not target_events:
         return None
@@ -355,7 +354,7 @@ _MOCK_EVENTS = {
     },
 }
 
-def _mock_match_business(name: str, website: str = None) -> Optional[str]:
+def _mock_match_business(name: str, website: str = None) -> str | None:
     for c in _MOCK_COMPANIES:
         if c["name"].lower() == name.lower():
             log.info(f"[mock] match_business: '{name}' -> {c['explorium_id']}")
@@ -368,7 +367,7 @@ def _mock_search_companies(query_str: str = "", filters: dict = None) -> list[di
     log.info(f"[mock] search_companies: query='{query_str}', filters={filters}, returning {len(_MOCK_COMPANIES)} companies")
     return list(_MOCK_COMPANIES)
 
-def _mock_enrich_company(business_id: str) -> Optional[dict]:
+def _mock_enrich_company(business_id: str) -> dict | None:
     data = _MOCK_EVENTS.get(business_id, {}).get("enrichment")
     log.info(f"[mock] enrich_company: business_id={business_id} -> {data}")
     return data
@@ -400,7 +399,7 @@ def _mock_fetch_prospects(business_id: str, job_levels: list = None, job_departm
         "linkedin": "linkedin.com/in/janesmith"
     }]
 
-def _mock_enrich_contact(prospect_id: str) -> Optional[dict]:
+def _mock_enrich_contact(prospect_id: str) -> dict | None:
     log.info(f"[mock] enrich_contact: prospect_id={prospect_id}")
     return {
         "professions_email": "jane.smith@example.com",
@@ -429,7 +428,7 @@ def _mock_bulk_enrich_contacts(prospect_ids: list[str]) -> list[dict]:
 # EXPORTED TOGGLE FUNCTIONS
 # =============================================================================
 
-def match_business(name: str, website: str = None) -> Optional[str]:
+def match_business(name: str, website: str = None) -> str | None:
     if settings.USE_MOCK_DATA:
         return _mock_match_business(name, website)
     return _real_match_business(name, website)
@@ -439,7 +438,7 @@ def search_companies(query_str: str = "", filters: dict = None) -> list[dict]:
         return _mock_search_companies(query_str, filters)
     return _real_search_companies(query_str, filters)
 
-def enrich_company(business_id: str) -> Optional[dict]:
+def enrich_company(business_id: str) -> dict | None:
     if settings.USE_MOCK_DATA:
         return _mock_enrich_company(business_id)
     return _real_enrich_company(business_id)
@@ -449,7 +448,7 @@ def fetch_prospects(business_id: str, job_levels: list = None, job_departments: 
         return _mock_fetch_prospects(business_id, job_levels, job_departments)
     return _real_fetch_prospects(business_id, job_levels, job_departments)
 
-def enrich_contact(prospect_id: str) -> Optional[dict]:
+def enrich_contact(prospect_id: str) -> dict | None:
     if settings.USE_MOCK_DATA:
         return _mock_enrich_contact(prospect_id)
     return _real_enrich_contact(prospect_id)

@@ -19,24 +19,23 @@ export async function GET(req: NextRequest) {
   const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000';
 
   try {
-    const response = await fetch(`${backendUrl}/api/stream?query=${encodeURIComponent(query)}`, {
-      method: 'GET',
+    const response = await fetch(`${backendUrl}/api/run`, {
+      method: 'POST',
       headers: {
-        'Accept': 'text/event-stream',
+        'Content-Type': 'application/json',
+        'X-API-KEY': process.env.GTM_API_KEY || 'dev-key',
       },
+      body: JSON.stringify({ query }),
       cache: 'no-store',
+      // @ts-ignore - duplex is valid but not yet in all TS fetch typedefs
+      duplex: 'half',
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[STREAM] Backend error from ${backendUrl}:`, response.status, errorText);
-      let parsedError = errorText;
-      try {
-        const jsonError = JSON.parse(errorText);
-        parsedError = jsonError.detail || jsonError.message || errorText;
-      } catch (e) {}
-      
-      const errorMessage = `Backend Error (${response.status}) at ${backendUrl}: ${parsedError}`;
+      const errorMessage = response.headers.get('content-type')?.includes('application/json')
+        ? (JSON.parse(errorText).detail || errorText)
+        : errorText;
       
       const sseError = `event: error\ndata: ${JSON.stringify({ message: errorMessage })}\n\n`;
       return new NextResponse(sseError, {

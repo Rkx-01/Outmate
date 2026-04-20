@@ -8,6 +8,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from api.routes import router, limiter
+from agents import * # Initialize all agents
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -29,21 +31,7 @@ def setup_logging():
 
 setup_logging()
 
-logging.basicConfig(level=logging.INFO)
-logging.info(f"CWD: {os.getcwd()}")
-logging.info(f"Files: {os.listdir('.')}")
-
-from api.routes import router, limiter
-
 app = FastAPI(title="GTM Intelligence API")
-
-@app.get("/")
-async def root():
-    return {"status": "online", "message": "GTM API is running"}
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -61,7 +49,13 @@ async def log_requests(request: Request, call_next):
     start = time.time()
     request_id = str(uuid4())[:8]
     response = await call_next(request)
-    logging.info(f"Request: {request.method} {request.url.path} - Status: {response.status_code}")
+    logging.info("request", extra={"extra": {
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": response.status_code,
+        "duration_ms": round((time.time() - start) * 1000, 2)
+    }})
     return response
 
 app.include_router(router, prefix="/api")

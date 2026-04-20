@@ -1,9 +1,13 @@
 from .base import BaseGTMAgent, parse_llm_json, arun_with_backoff
 from models.agents import AgentInput, AgentOutput
 from .base import AgentRegistry
+from config import VALID_LINKEDIN_CATEGORIES
 
 class PlannerAgent(BaseGTMAgent):
     def __init__(self):
+        # Format valid categories for prompt
+        categories_list = ", ".join([f"'{cat}'" for cat in VALID_LINKEDIN_CATEGORIES])
+        
         super().__init__(
             name="planner",
             description="Creates a step-by-step execution plan for the GTM intelligence run.",
@@ -12,41 +16,9 @@ class PlannerAgent(BaseGTMAgent):
                 "Break down the GTM query into logical execution phases: Discovery, Signals, Validation, and Strategy.",
                 "Extract structured Explorium API JSON filters for 'company_filters' and 'prospect_filters'.",
                 "Valid company filters: 'country_code', 'company_size', 'company_revenue', 'company_age', 'is_public_company', 'linkedin_category', 'website_keywords', 'events'. Use {'values': ['...']} for arrays, {'value': bool} for boolean.",
-                "IMPORTANT: The 'industry' field DOES NOT EXIST. You MUST use 'linkedin_category'. Only use values from the VALID_LINKEDIN_CATEGORIES list below — never invent or guess a category.",
-                # === VALID LINKEDIN CATEGORIES (use exactly as written) ===
-                "VALID_LINKEDIN_CATEGORIES: "
-                "'information technology and services', "
-                "'computer software', "
-                "'internet', "
-                "'financial services', "
-                "'computer & network security', "
-                "'software development', "
-                "'telecommunications', "
-                "'semiconductors', "
-                "'computer hardware', "
-                "'cloud computing', "
-                "'data analytics', "
-                "'banking', "
-                "'investment banking', "
-                "'venture capital & private equity', "
-                "'hospital & health care', "
-                "'biotechnology', "
-                "'pharmaceuticals'. "
-                "Only choose from this list. If none fits perfectly, pick the closest match.",
-                # === CATEGORY MAPPING (common user intents -> correct LinkedIn category) ===
-                "CATEGORY MAPPING: "
-                "'cybersecurity' / 'cyber security' / 'infosec' -> 'computer & network security'. "
-                "'saas' / 'b2b software' / 'enterprise software' -> 'computer software'. "
-                "'fintech' / 'payments' -> 'financial services'. "
-                "'healthtech' / 'health IT' -> 'hospital & health care'. "
-                "'biotech' -> 'biotechnology'. "
-                "'pharma' -> 'pharmaceuticals'. "
-                "'vc' / 'private equity' / 'pe' -> 'venture capital & private equity'. "
-                "'semiconductor' / 'chips' -> 'semiconductors'. "
-                "'networking' / 'telecom' -> 'telecommunications'. "
-                "'cloud' / 'aws' / 'azure' / 'gcp' -> 'cloud computing'. "
-                "'analytics' / 'data science' / 'big data' -> 'data analytics'. "
-                "Never use a category not in VALID_LINKEDIN_CATEGORIES.",
+                "IMPORTANT: The 'industry' field DOES NOT EXIST. You MUST use 'linkedin_category' (e.g., 'software development', 'computer and network security', 'data security software products', 'investment banking').",
+                f"VALID LINKEDIN CATEGORIES (use EXACTLY these): {categories_list}",
+                "CATEGORY MAPPING: 'cybersecurity' -> 'computer & network security'. Never guess categories not in the list above.",
                 "If using 'events', schema MUST be: {'values': ['new_funding_round'], 'last_occurrence': 90}. Never invent event names.",
 
                 # === GENERIC FUNDING STAGE -> FILTER MAPPING ===
